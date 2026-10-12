@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Той</title>
+<link href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600&family=Lora:ital,wght@0,500;0,700;1,500&display=swap" rel="stylesheet">
+<style>
+  :root { --ink:#123B45; --teal:#1F6F78; --sea:#0E5E63; --deep:#0A3D40; --gold:#D9A441; --sky:#EEF4F3; --line:#CFDCDA; --red:#B5483B; --green:#2E7D4F; --muted:#4F6F73 }
+  * { box-sizing:border-box }
+  body { margin:0; font-family:'Golos Text',sans-serif; color:var(--ink); background:var(--sky) }
+  input,select,textarea { font:inherit; color:var(--ink); border:1px solid var(--line); border-radius:8px; padding:10px; background:#fff; width:100% }
+  input:focus,select:focus,textarea:focus,button:focus-visible { outline:2px solid var(--gold); outline-offset:1px }
+  button { font:inherit; cursor:pointer }
+  .wrap { max-width:640px; margin:0 auto; padding:8px 16px 60px }
+  .btn { margin-top:12px; background:var(--teal); color:#fff; border:none; border-radius:8px; padding:12px 16px; font-weight:600; width:100% }
+  .btn.ghost { background:#fff; color:var(--teal); border:1px solid var(--teal) }
+  .btn:disabled { opacity:.6 }
+  h2 { font-family:Lora,serif; font-size:22px; margin:18px 0 4px }
+  .hint { margin:0 0 10px; color:var(--muted); font-size:14px; line-height:1.5 }
+  .row { display:flex; align-items:center; gap:10px; padding:12px 0; border-bottom:1px solid var(--line) }
+  .row > div { flex:1; min-width:0 }
+  .x { border:none; background:none; color:#8AA3A6; font-size:18px }
+  .badge { font-size:13px; padding:3px 8px; border-radius:12px; white-space:nowrap }
+  .card { background:#fff; border-radius:10px; padding:14px; border:1px solid var(--line) }
+  .err { color:var(--red) } .ok { color:var(--green) }
+  label.f { display:block; margin-top:12px; font-size:14px; font-weight:500 }
+  label.f > *:last-child { margin-top:6px }
+  .tabs { display:flex; max-width:640px; margin:0 auto; padding:0 12px; gap:2px; overflow-x:auto }
+  .tabs button { border:none; background:none; padding:14px 10px; white-space:nowrap; font-weight:600; color:#6B8A8E; border-bottom:3px solid transparent }
+  .tabs button.on { color:var(--ink); border-color:var(--gold) }
+  .chips { display:flex; gap:6px; margin:16px 0 4px; flex-wrap:wrap }
+  .chips button { border:1px solid var(--line); background:#fff; border-radius:20px; padding:6px 12px; font-size:14px }
+  .chips button.on { background:var(--teal); color:#fff; border-color:var(--teal) }
+  /* Приглашение */
+  .inv { background:var(--deep); min-height:100vh }
+  .inv .paper { max-width:460px; margin:0 auto; background:#F7FBFA; min-height:100vh }
+  .inv .hero { background:var(--sea); color:#fff; text-align:center; padding:56px 24px 48px; position:relative; overflow:hidden }
+  .inv .hero svg { position:absolute; opacity:.22 }
+  .inv h1 { font-family:Lora,serif; font-size:40px; line-height:1.15; margin:14px 0 10px }
+  .inv section { padding:30px 26px; border-bottom:1px solid var(--line); text-align:center }
+  .inv section h2 { font-size:24px; margin:0 0 12px }
+  .inv p { line-height:1.6; margin:0 }
+  .count { display:flex; justify-content:center; gap:14px }
+  .count b { display:block; font-family:Lora,serif; font-size:30px; color:var(--teal) }
+  .count span { font-size:13px; color:#55797A }
+  .step { width:44px; height:44px; border-radius:50%; border:1px solid var(--teal); background:#fff; color:var(--teal); font-size:22px }
+  @media (prefers-reduced-motion: no-preference) { .inv h1 { animation:rise 1.2s ease-out both } }
+  @keyframes rise { from { opacity:0; transform:translateY(12px) } to { opacity:1; transform:none } }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script type="module">
+import { h, render } from "https://esm.sh/preact@10.24.3";
+import { useState, useEffect } from "https://esm.sh/preact@10.24.3/hooks";
+import htm from "https://esm.sh/htm@3.1.1";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+const html = htm.bind(h);
+const sb = createClient("https://ewtojogvzvwbcnymtllk.supabase.co", "sb_publishable_JJoHQP6o_-W1UqMPDJPSWg_ge52v7th");
+
+const MONTHS = ["қаңтар","ақпан","наурыз","сәуір","мамыр","маусым","шілде","тамыз","қыркүйек","қазан","қараша","желтоқсан"];
+const KINDS = ["Сүндет той","Үйлену той","Қыз ұзату","Тұсаукесер","Мерейтой","Беташар"];
+const fmt = (n) => (Number(n) || 0).toLocaleString("ru-RU") + " ₸";
+const norm = (s) => (s || "").toLowerCase().replace(/ё/g, "е");
+const tokens = (s) => norm(s).split(/[^a-zа-яәғқңөұүһі]+/i).filter((t) => t.length > 1);
+// родительный падеж для казахских имён: Амир → Амирдің, Тимур → Тимурдың, Әли → Әлинің
+const genitive = (name) => {
+  const w = (name || "").trim(); const last = w.slice(-1).toLowerCase();
+  const vowels = w.toLowerCase().match(/[аәеиіоөұүыуэюя]/g) || [];
+  const front = /[әеиіөүэ]/.test(vowels[vowels.length - 1] || "а");
+  const end = /[аәеиіоөұүыэюя]/.test(last) ? "н" : /[рлйумнңзж]/.test(last) ? "д" : "т";
+  return w + end + (front ? "ің" : "ың");
+};
+const inviteUrl = (slug) => location.origin + location.pathname + "?t=" + slug;
+const cleanLines = (txt) => txt.split("\n").map((l) => l.replace(/^[\s\d.)\-–\u2060\u200b]+/, "").replace(/\.$/, "").trim()).filter(Boolean);
+const toLocal = (iso) => { if (!iso) return ""; const d = new Date(iso); const z = (n) => String(n).padStart(2, "0"); return `${d.getFullYear()}-${z(d.getMonth()+1)}-${z(d.getDate())}T${z(d.getHours())}:${z(d.getMinutes())}`; };
+const errText = (e) => "Не получилось: " + (e?.message || "проверьте интернет") + ". Попробуйте ещё раз.";
+
+const Ornament = ({ style }) => html`<svg width="200" height="200" viewBox="0 0 100 100" style=${style} aria-hidden="true"><path d="M50 8C66 24 66 40 50 50 34 40 34 24 50 8ZM92 50C76 66 60 66 50 50 60 34 76 34 92 50ZM50 92C34 76 34 60 50 50 66 60 66 76 50 92ZM8 50C24 34 40 34 50 50 40 66 24 66 8 50Z" fill="#F2D79B"/></svg>`;
+
+/* ================= ПРИГЛАШЕНИЕ ДЛЯ ГОСТЕЙ ================= */
+function Invitation({ slug }) {
+  const [t, setT] = useState(undefined);
+  const [now, setNow] = useState(Date.now());
+  const [f, setF] = useState({ name: "", come: true, count: 2, wish: "" });
+  const [st, setSt] = useState("form");
+  useEffect(() => {
+    sb.rpc("get_invite", { p_slug: slug }).then(({ data }) => setT(data && data[0] ? data[0] : null));
+    const i = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(i);
+  }, []);
+  if (t === undefined) return html`<p style="padding:40px;text-align:center">Жүктелуде…</p>`;
+  if (t === null) return html`<p style="padding:40px;text-align:center">Шақыру табылмады. Сілтемені тексеріңіз.</p>`;
+  const d = t.date ? new Date(t.date) : null;
+  const s = d ? Math.max(0, Math.floor((d - now) / 1000)) : 0;
+  const parts = [[Math.floor(s/86400),"күн"],[Math.floor(s%86400/3600),"сағат"],[Math.floor(s%3600/60),"минут"],[s%60,"секунд"]];
+  const send = async () => {
+    if (!f.name.trim()) return;
+    setSt("sending");
+    const { data, error } = await sb.rpc("submit_rsvp", { p_slug: slug, p_name: f.name, p_come: f.come, p_count: f.count, p_wish: f.wish });
+    setSt(error || !data ? "error" : f.come ? "yes" : "no");
+  };
+  const choice = (val, label) => html`<button onClick=${() => setF({ ...f, come: val })} style=${`flex:1;padding:12px;border-radius:8px;font-weight:600;border:1px solid ${f.come === val ? "var(--teal)" : "var(--line)"};background:${f.come === val ? "var(--teal)" : "#fff"};color:${f.come === val ? "#fff" : "var(--ink)"}`}>${label}</button>`;
+  return html`<div class="inv"><div class="paper">
+    <div class="hero">
+      <${Ornament} style="left:-60px;top:-60px" /><${Ornament} style="right:-60px;bottom:-60px" />
+      <div style="color:#F2D79B">${t.kind}ға шақыру</div>
+      <h1>${t.names}</h1>
+      ${d && html`<div style="font-family:Lora,serif;font-style:italic;font-size:20px">${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}</div>`}
+    </div>
+    <section><h2>${t.greet}</h2><p>${t.body}</p></section>
+    ${d && html`<section><h2>Тойға дейін</h2><div class="count">${parts.map(([n, l]) => html`<div style="min-width:60px"><b>${n}</b><span>${l}</span></div>`)}</div></section>`}
+    <section>
+      <h2>Той салтанаты</h2>
+      <p><b>${t.venue}</b><br/>${t.address}${d && html`<br/>Уақыты: ${d.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}`}</p>
+      ${t.map && html`<a href=${t.map} target="_blank" rel="noopener noreferrer" style="display:inline-block;margin-top:12px;background:var(--teal);color:#fff;border-radius:24px;padding:12px 24px;text-decoration:none;font-weight:600">Картадан ашу</a>`}
+    </section>
+    ${t.hosts && html`<section><h2>Той иелері</h2><p style="font-family:Lora,serif;font-size:20px">${t.hosts}</p></section>`}
+    <section style="text-align:left">
+      <h2 style="text-align:center">Келетініңізді растаңыз</h2>
+      ${st === "yes" || st === "no" ? html`<p style="text-align:center;font-size:18px">${st === "yes" ? "Рақмет! Сізді тойда күтеміз 🤍" : "Рақмет, жауабыңызды алдық."}</p>` : html`
+        <label class="f">Аты-жөніңіз<input value=${f.name} onInput=${(e) => setF({ ...f, name: e.target.value })} placeholder="Мысалы: Берик пен Айэстра"/></label>
+        <div style="display:flex;gap:8px;margin-top:12px">${choice(true, "Иә, келемін")}${choice(false, "Келе алмаймын")}</div>
+        ${f.come && html`<div style="margin-top:14px"><div style="font-weight:600;font-size:14px">Неше адам боласыз?</div>
+          <div style="display:flex;align-items:center;gap:16px;margin-top:6px">
+            <button class="step" onClick=${() => setF({ ...f, count: Math.max(1, f.count - 1) })}>−</button>
+            <b style="font-family:Lora,serif;font-size:28px;min-width:30px;text-align:center">${f.count}</b>
+            <button class="step" onClick=${() => setF({ ...f, count: Math.min(30, f.count + 1) })}>+</button>
+          </div></div>`}
+        <label class="f">Тілегіңіз (міндетті емес)<textarea rows="3" value=${f.wish} onInput=${(e) => setF({ ...f, wish: e.target.value })}></textarea></label>
+        <button class="btn" style="border-radius:24px" disabled=${st === "sending" || !f.name.trim()} onClick=${send}>${st === "sending" ? "Жіберілуде…" : "Жауап жіберу"}</button>
+        ${st === "error" && html`<p class="err">Жауап жіберілмеді. Интернетті тексеріп, қайта басыңыз.</p>`}
+      `}
+    </section>
+  </div></div>`;
+}
+
+/* ================= ВХОД ХОЗЯИНА ================= */
+function Login() {
+  const [email, setEmail] = useState("");
+  const [st, setSt] = useState("");
+  const go = async () => {
+    if (!email.includes("@")) return;
+    setSt("sending");
+    const { error } = await sb.auth.signInWithOtp({ email: email.trim(), options: { emailRedirectTo: location.origin + location.pathname } });
+    setSt(error ? "err:" + error.message : "sent");
+  };
+  return html`<div style="min-height:100vh;display:grid;place-items:center;padding:20px"><div style="max-width:360px;width:100%">
+    <h1 style="font-family:Lora,serif;font-size:30px">Той — кабинет хозяина</h1>
+    <p class="hint">Введите почту. Мы отправим письмо со ссылкой для входа, пароль не нужен.</p>
+    ${st === "sent" ? html`<div class="card">Письмо отправлено на <b>${email}</b>. Откройте его на этом телефоне и нажмите ссылку. Если письма нет, проверьте папку «Спам».</div>` : html`
+      <input type="email" value=${email} onInput=${(e) => setEmail(e.target.value)} placeholder="name@mail.ru" />
+      <button class="btn" disabled=${st === "sending"} onClick=${go}>${st === "sending" ? "Отправляю…" : "Получить ссылку для входа"}</button>
+      ${st.startsWith("err:") && html`<p class="err">Письмо не отправилось: ${st.slice(4)}</p>`}`}
+  </div></div>`;
+}
+
+/* ================= СПИСОК ТОЕВ ================= */
+function ToyList({ open }) {
+  const [list, setList] = useState(null);
+  const [err, setErr] = useState("");
+  const load = () => sb.from("toys").select("*").order("created_at", { ascending: false }).then(({ data, error }) => { if (error) setErr(errText(error)); setList(data || []); });
+  useEffect(load, []);
+  const create = async () => {
+    const { data, error } = await sb.from("toys").insert({ names: "Новый той", greet: "Ағайын-туыс, дос-жаран!", body: "Сіздерді тойымыздың құрметті қонағы болуға шақырамыз!" }).select().single();
+    if (error) return setErr(errText(error));
+    open(data);
+  };
+  return html`<div class="wrap">
+    <div style="display:flex;justify-content:space-between;align-items:center"><h2>Мои тои</h2>
+      <button class="x" style="font-size:14px" onClick=${() => sb.auth.signOut()}>Выйти</button></div>
+    ${err && html`<p class="err">${err}</p>`}
+    ${list === null ? html`<p>Загружаю…</p>` : list.length === 0 && html`<p class="hint">Пока нет ни одного тоя. Создайте первый.</p>`}
+    ${(list || []).map((t) => html`<button onClick=${() => open(t)} class="card" style="display:block;width:100%;text-align:left;margin-top:10px">
+      <div style="color:var(--gold);font-size:14px">${t.kind}</div><b style="font-family:Lora,serif;font-size:20px">${t.names}</b>
+      <div class="hint" style="margin:4px 0 0">${t.date ? new Date(t.date).toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric" }) : "Дата не указана"} · ${t.venue || "место не указано"}</div></button>`)}
+    <button class="btn" onClick=${create}>Создать той</button>
+  </div>`;
+}
+
+/* ================= ПАНЕЛЬ ТОЯ ================= */
+function ToyView({ toy: initial, back }) {
+  const [toy, setToy] = useState(initial);
+  const [tab, setTab] = useState(initial.date ? "guests" : "toy");
+  const [d, setD] = useState({ guests: [], rsvps: [], artists: [], expenses: [], gifts: [] });
+  const [err, setErr] = useState("");
+  const [loading, setLoading] = useState(true);
+
+  const load = async () => {
+    const q = (t) => sb.from(t).select("*").eq("toy_id", toy.id).order(t === "artists" || t === "expenses" ? "id" : "created_at");
+    const res = await Promise.all(["guests","rsvps","artists","expenses","gifts"].map(q));
+    const bad = res.find((r) => r.error); if (bad) setErr(errText(bad.error));
+    setD({ guests: res[0].data || [], rsvps: res[1].data || [], artists: res[2].data || [], expenses: res[3].data || [], gifts: res[4].data || [] });
+    setLoading(false);
+  };
+  useEffect(() => { load(); const i = setInterval(load, 30000); return () => clearInterval(i); }, []);
+
+  // действия с базой: после каждого — перезагрузка
+  const act = async (promise) => { const { error } = await promise; if (error) setErr(errText(error)); else setErr(""); await load(); };
+  const db = {
+    add: (t, rows) => act(sb.from(t).insert((Array.isArray(rows) ? rows : [rows]).map((r) => ({ ...r, toy_id: toy.id })))),
+    upd: (t, id, patch) => act(sb.from(t).update(patch).eq("id", id)),
+    del: (t, id) => act(sb.from(t).delete().eq("id", id)),
+  };
+
+  // сопоставление ответов гостей со списком
+  const guests = d.guests.map((g) => {
+    const gt = tokens(g.name);
+    const m = d.rsvps.find((r) => { const rt = tokens(r.name); return gt.length && gt.every((x) => rt.includes(x)); })
+      || d.rsvps.find((r) => gt[0] && tokens(r.name).includes(gt[0]));
+    return m ? { ...g, status: m.come ? "yes" : "no", count: m.come ? m.count : g.count, self: m } : g;
+  });
+  const used = new Set(guests.filter((g) => g.self).map((g) => g.self.id));
+  const strangers = d.rsvps.filter((r) => !used.has(r.id));
+  const yes = guests.filter((g) => g.status === "yes").reduce((s, g) => s + Number(g.count || 0), 0) + strangers.filter((r) => r.come).reduce((s, r) => s + r.count, 0);
+  const invited = d.guests.reduce((s, g) => s + Number(g.count || 1), 0);
+  const plan = d.expenses.reduce((s, x) => s + Number(x.plan), 0) + d.artists.reduce((s, a) => s + Number(a.fee) + Number(a.travel), 0);
+  const paid = d.expenses.reduce((s, x) => s + Number(x.paid), 0) + d.artists.reduce((s, a) => s + Number(a.paid), 0);
+  const days = toy.date ? Math.ceil((new Date(toy.date) - new Date()) / 86400000) : null;
+  const stat = (big, small) => html`<div><div style="font-family:Lora,serif;font-size:20px;font-weight:700">${big}</div><div style="opacity:.75">${small}</div></div>`;
+  const TABS = [["toy","Той"],["guests","Гости"],["program","Программа"],["budget","Бюджет"],["gifts","Кәде дәптері"]];
+
+  return html`<div>
+    <header style="background:var(--ink);color:#fff;padding:18px 20px">
+      <div style="max-width:640px;margin:0 auto">
+        <button onClick=${back} style="background:none;border:none;color:#fff;opacity:.75;padding:0;font-size:14px">← Мои тои</button>
+        <div style="color:var(--gold);font-size:14px;margin-top:8px">${toy.kind}${toy.venue ? " · " + toy.venue : ""}</div>
+        <h1 style="font-family:Lora,serif;font-size:26px;margin:4px 0 12px">${toy.names}</h1>
+        <div style="display:flex;gap:22px;flex-wrap:wrap;font-size:14px">
+          ${stat(days === null ? "—" : days >= 0 ? days : "прошёл", "дней до тоя")}
+          ${stat(`${yes} / ${invited}`, "придут / приглашено")}
+          ${stat(fmt(plan - paid), "осталось оплатить")}
+        </div>
+      </div>
+    </header>
+    <nav class="tabs">${TABS.map(([k, l]) => html`<button class=${tab === k ? "on" : ""} onClick=${() => setTab(k)}>${l}</button>`)}</nav>
+    <div class="wrap">
+      ${err && html`<p class="err">${err}</p>`}
+      ${loading ? html`<p>Загружаю…</p>` : html`
+        ${tab === "toy" && html`<${ToySettings} toy=${toy} setToy=${setToy} />`}
+        ${tab === "guests" && html`<${Guests} toy=${toy} guests=${guests} strangers=${strangers} db=${db} reload=${load} />`}
+        ${tab === "program" && html`<${Program} list=${d.artists} db=${db} />`}
+        ${tab === "budget" && html`<${Budget} list=${d.expenses} db=${db} plan=${plan} paid=${paid} />`}
+        ${tab === "gifts" && html`<${Gifts} list=${d.gifts} db=${db} />`}
+      `}
+    </div>
+  </div>`;
+}
+
+function ToySettings({ toy, setToy }) {
+  const [f, setF] = useState({ ...toy, date: toLocal(toy.date) });
+  const [st, setSt] = useState("");
+  const ch = (k) => (e) => { setF({ ...f, [k]: e.target.value }); setSt(""); };
+  const save = async () => {
+    setSt("saving");
+    const patch = { kind: f.kind, names: f.names, date: f.date ? new Date(f.date).toISOString() : null, venue: f.venue, address: f.address, map: f.map, hosts: f.hosts, greet: f.greet, body: f.body };
+    const { data, error } = await sb.from("toys").update(patch).eq("id", toy.id).select().single();
+    if (error) return setSt("err");
+    setToy(data); setSt("ok");
+  };
+  const link = inviteUrl(toy.slug);
+  const copy = () => navigator.clipboard?.writeText(link).then(() => setSt("copied"));
+  const field = (k, label, ph) => html`<label class="f">${label}<input value=${f[k] || ""} onInput=${ch(k)} placeholder=${ph}/></label>`;
+  return html`
+    <h2>Той и приглашение</h2>
+    <p class="hint">Заполните данные, и приглашение для гостей соберётся само. Гости видят только приглашение.</p>
+    <label class="f">Вид тоя<select value=${f.kind} onChange=${ch("kind")}>${KINDS.map((k) => html`<option>${k}</option>`)}</select></label>
+    ${field("names", "Чей той (крупно на приглашении)", "Тимур мен Амир")}
+    <label class="f">Дата и время<input type="datetime-local" value=${f.date} onInput=${ch("date")}/></label>
+    ${field("venue", "Ресторан", "«Royal Rose» мейрамханасы")}
+    ${field("address", "Адрес", "Шымкент қаласы, ...")}
+    ${field("map", "Ссылка на карту 2ГИС", "https://go.2gis.com/...")}
+    ${field("hosts", "Той иелері", "Абдулла мен Жулдыз")}
+    ${field("greet", "Обращение", "Ағайын-туыс, дос-жаран!")}
+    <label class="f">Текст приглашения<textarea rows="4" value=${f.body || ""} onInput=${ch("body")}></textarea></label>
+    <button class="btn" disabled=${st === "saving"} onClick=${save}>${st === "saving" ? "Сохраняю…" : "Сохранить"}</button>
+    ${st === "ok" && html`<p class="ok">Сохранено. Гости увидят новые данные по той же ссылке.</p>`}
+    ${st === "err" && html`<p class="err">Не сохранилось. Проверьте интернет и нажмите ещё раз.</p>`}
+    <h2>Ссылка на приглашение</h2>
+    <div class="card" style="word-break:break-all;font-size:14px">${link}</div>
+    <button class="btn ghost" onClick=${copy}>${st === "copied" ? "Скопировано" : "Скопировать ссылку"}</button>
+    <a href=${link} target="_blank" class="btn ghost" style="display:block;text-align:center;text-decoration:none">Открыть как гость</a>`;
+}
+
+function Guests({ toy, guests, strangers, db, reload }) {
+  const [g, setG] = useState({ name: "", phone: "", count: 2 });
+  const [bulk, setBulk] = useState(""); const [showBulk, setShowBulk] = useState(false);
+  const [filter, setFilter] = useState("all");
+  const add = () => { if (!g.name.trim()) return; db.add("guests", { name: g.name.trim(), phone: g.phone, count: Number(g.count) || 1 }); setG({ name: "", phone: "", count: 2 }); };
+  const importBulk = () => {
+    const have = new Set(guests.map((x) => norm(x.name).replace(/[\s–-]/g, "")));
+    const rows = cleanLines(bulk).map((n) => ({ name: n.replace(/\s*-\s*/g, " – "), count: /-/.test(n) ? 2 : 1 })).filter((r) => !have.has(norm(r.name).replace(/[\s–-]/g, "")));
+    if (rows.length) db.add("guests", rows);
+    setBulk(""); setShowBulk(false);
+  };
+  const invite = (x) => {
+    const text = `Құрметті ${x.name}!\nСіздерді ${genitive(toy.names)} ${toy.kind.toLowerCase()}ына шақырамыз.\nШақыру және келетініңізді растау осы сілтемеде:\n${inviteUrl(toy.slug)}`;
+    const phone = (x.phone || "").replace(/\D/g, "").replace(/^8/, "7");
+    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(text)}`, "_blank");
+  };
+  const cnt = (s) => guests.filter((x) => x.status === s).length;
+  const shown = guests.filter((x) => filter === "all" || x.status === filter);
+  const badge = (x) => x.status === "yes" ? html`<span class="badge" style="background:#2E7D4F1A;color:var(--green)">придут · ${x.count} чел.</span>`
+    : x.status === "no" ? html`<span class="badge" style="background:#B5483B1A;color:var(--red)">не придут</span>`
+    : html`<span class="badge" style="background:#6B8A8E1A;color:#6B8A8E">ждём · ${x.count} чел.</span>`;
+  return html`
+    <h2>Гости</h2>
+    <p class="hint">Отправьте гостю приглашение в WhatsApp. Когда он ответит, статус обновится здесь сам.</p>
+    <input value=${g.name} onInput=${(e) => setG({ ...g, name: e.target.value })} placeholder="Имя гостя или пары, например Берик-Айэстра"/>
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <input value=${g.phone} onInput=${(e) => setG({ ...g, phone: e.target.value })} placeholder="+7 7__ ___ __ __" inputmode="tel"/>
+      <input type="number" min="1" value=${g.count} onInput=${(e) => setG({ ...g, count: e.target.value })} style="width:80px" aria-label="Сколько человек"/>
+    </div>
+    <button class="btn" onClick=${add}>Добавить гостя</button>
+    <button class="btn ghost" onClick=${() => setShowBulk(!showBulk)}>Вставить список из WhatsApp</button>
+    ${showBulk && html`<div style="margin-top:8px">
+      <textarea rows="8" value=${bulk} onInput=${(e) => setBulk(e.target.value)} placeholder=${"1. Берик-Айэстра\n2. Арайлым"}></textarea>
+      <p class="hint">Пара через дефис считается как 2 человека. Повторы пропускаются.</p>
+      <button class="btn" onClick=${importBulk}>Добавить всех</button></div>`}
+    <button class="btn ghost" onClick=${reload}>Обновить ответы гостей</button>
+    <div class="chips">${[["all",`Все ${guests.length}`],["yes",`Придут ${cnt("yes")}`],["no",`Не придут ${cnt("no")}`],["wait",`Не ответили ${cnt("wait")}`]].map(([k, l]) =>
+      html`<button class=${filter === k ? "on" : ""} onClick=${() => setFilter(k)}>${l}</button>`)}</div>
+    ${shown.map((x) => html`<div class="row" key=${x.id}><div>
+      <div style="display:flex;justify-content:space-between;gap:8px;align-items:center"><b>${x.name}</b>${badge(x)}</div>
+      ${x.self ? html`<div class="hint" style="margin:4px 0 0">Ответили сами как «${x.self.name}»${x.self.wish ? ` · «${x.self.wish}»` : ""}</div>` : html`
+        <div style="display:flex;gap:6px;margin-top:8px">
+          <input value=${x.phone} placeholder="Телефон" inputmode="tel" style="padding:6px" onChange=${(e) => db.upd("guests", x.id, { phone: e.target.value })}/>
+          <button onClick=${() => invite(x)} disabled=${!x.phone} style=${`border:none;border-radius:8px;padding:6px 12px;color:#fff;white-space:nowrap;background:${x.phone ? "#25D366" : "#B9D9C4"}`}>Отправить</button>
+        </div>`}
+    </div><button class="x" aria-label="Удалить" onClick=${() => confirm("Удалить " + x.name + "?") && db.del("guests", x.id)}>✕</button></div>`)}
+    ${strangers.length > 0 && html`
+      <h2>Ответили, но нет в списке</h2>
+      <p class="hint">Проверьте, может быть гость написал имя по-другому.</p>
+      ${strangers.map((r) => html`<div class="row" key=${r.id}><div><b>${r.name}</b> · ${r.come ? `придут, ${r.count} чел.` : "не придут"}${r.wish ? html`<div class="hint" style="margin:0">«${r.wish}»</div>` : ""}</div>
+        <button class="btn ghost" style="width:auto;margin:0;padding:6px 10px" onClick=${() => db.add("guests", { name: r.name, count: r.count || 1 })}>В список</button></div>`)}`}`;
+}
+
+function Program({ list, db }) {
+  const [bulk, setBulk] = useState(""); const [role, setRole] = useState("Артист");
+  const importBulk = () => {
+    const rows = cleanLines(bulk).map((l) => { const m = l.match(/^(.*?)\s*\(([^)]*)\)\s*$/); return { role, name: (m ? m[1] : l).trim(), city: m ? m[2].trim() : "" }; });
+    if (rows.length) db.add("artists", rows); setBulk("");
+  };
+  const num = (x, k, ph) => html`<input type="number" value=${x[k] || ""} placeholder=${ph} style="padding:6px;font-size:14px" onChange=${(e) => db.upd("artists", x.id, { [k]: Number(e.target.value) || 0 })}/>`;
+  const noPrice = list.filter((x) => !Number(x.fee)).length;
+  return html`
+    <h2>Программа</h2>
+    <p class="hint">Ведущие и артисты. Гонорар, дорога с проживанием и оплата сразу идут в бюджет.</p>
+    ${noPrice > 0 && html`<p class="err">Без суммы: ${noPrice}</p>`}
+    ${["Ведущий","Артист"].map((r) => html`<div>
+      <h3 style="font-size:16px;margin:18px 0 0">${r === "Ведущий" ? "Ведущие" : "Артисты и коллективы"}</h3>
+      ${list.filter((x) => x.role === r).map((x) => html`<div class="row" key=${x.id}><div>
+        <b>${x.name}</b> <span style="color:#6B8A8E">· ${x.city}</span>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:8px">${num(x, "fee", "Гонорар")}${num(x, "travel", "Дорога")}${num(x, "paid", "Оплачено")}</div>
+      </div><button class="x" aria-label="Удалить" onClick=${() => confirm("Удалить " + x.name + "?") && db.del("artists", x.id)}>✕</button></div>`)}
+    </div>`)}
+    <h2>Добавить списком</h2>
+    <p class="hint">Каждый с новой строки, город в скобках, как в WhatsApp: «Номат тобы (Тараз)».</p>
+    <select value=${role} onChange=${(e) => setRole(e.target.value)}><option>Артист</option><option>Ведущий</option></select>
+    <textarea rows="6" value=${bulk} onInput=${(e) => setBulk(e.target.value)} style="margin-top:8px" placeholder=${"1. Мая Веронская (Алматы)\n2. Марат Алибаев (Алматы)"}></textarea>
+    <button class="btn" onClick=${importBulk}>Добавить</button>`;
+}
+
+function Budget({ list, db, plan, paid }) {
+  const [b, setB] = useState({ name: "", plan: "", paid: "" });
+  const add = () => { if (!b.name.trim()) return; db.add("expenses", { name: b.name.trim(), plan: Number(b.plan) || 0, paid: Number(b.paid) || 0 }); setB({ name: "", plan: "", paid: "" }); };
+  return html`
+    <h2>Бюджет</h2>
+    <p class="hint">Включает программу и все остальные расходы.</p>
+    <div class="card" style="line-height:1.8">
+      <div style="display:flex;justify-content:space-between"><span>Всего</span><b>${fmt(plan)}</b></div>
+      <div style="display:flex;justify-content:space-between"><span>Оплачено</span><b>${fmt(paid)}</b></div>
+      <div style="display:flex;justify-content:space-between;color:var(--red)"><span>Осталось</span><b>${fmt(plan - paid)}</b></div>
+      <div style="height:8px;background:var(--sky);border-radius:4px;margin-top:6px"><div style=${`height:8px;border-radius:4px;background:var(--gold);width:${plan ? Math.min(100, paid / plan * 100) : 0}%`}></div></div>
+    </div>
+    <input value=${b.name} onInput=${(e) => setB({ ...b, name: e.target.value })} placeholder="Расход, например «Ресторан»" style="margin-top:14px"/>
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <input type="number" value=${b.plan} onInput=${(e) => setB({ ...b, plan: e.target.value })} placeholder="Стоимость"/>
+      <input type="number" value=${b.paid} onInput=${(e) => setB({ ...b, paid: e.target.value })} placeholder="Оплачено"/>
+    </div>
+    <button class="btn" onClick=${add}>Добавить расход</button>
+    ${list.map((x) => html`<div class="row" key=${x.id}><div><b>${x.name}</b>
+      <div style="display:flex;gap:6px;margin-top:6px">
+        <input type="number" value=${x.plan} style="padding:6px" aria-label="Стоимость" onChange=${(e) => db.upd("expenses", x.id, { plan: Number(e.target.value) || 0 })}/>
+        <input type="number" value=${x.paid} style="padding:6px" aria-label="Оплачено" onChange=${(e) => db.upd("expenses", x.id, { paid: Number(e.target.value) || 0 })}/>
+      </div></div><button class="x" aria-label="Удалить" onClick=${() => confirm("Удалить " + x.name + "?") && db.del("expenses", x.id)}>✕</button></div>`)}`;
+}
+
+function Gifts({ list, db }) {
+  const [g, setG] = useState({ name: "", amount: "", note: "" });
+  const add = () => { if (!g.name.trim()) return; db.add("gifts", { name: g.name.trim(), amount: Number(g.amount) || 0, note: g.note }); setG({ name: "", amount: "", note: "" }); };
+  return html`
+    <h2>Кәде дәптері</h2>
+    <p class="hint">Кто сколько подарил. Пригодится, когда пойдёте к ним на той.</p>
+    <div style="font-family:Lora,serif;font-size:24px;font-weight:700">${fmt(list.reduce((s, x) => s + Number(x.amount), 0))}</div>
+    <input value=${g.name} onInput=${(e) => setG({ ...g, name: e.target.value })} placeholder="От кого" style="margin-top:10px"/>
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <input type="number" value=${g.amount} onInput=${(e) => setG({ ...g, amount: e.target.value })} placeholder="Сумма"/>
+      <input value=${g.note} onInput=${(e) => setG({ ...g, note: e.target.value })} placeholder="Заметка"/>
+    </div>
+    <button class="btn" onClick=${add}>Записать</button>
+    ${[...list].reverse().map((x) => html`<div class="row" key=${x.id}><div>
+      <div style="display:flex;justify-content:space-between"><b>${x.name}</b><span>${fmt(x.amount)}</span></div>
+      ${x.note && html`<div class="hint" style="margin:0">${x.note}</div>`}
+    </div><button class="x" aria-label="Удалить" onClick=${() => confirm("Удалить запись?") && db.del("gifts", x.id)}>✕</button></div>`)}`;
+}
+
+/* ================= КОРЕНЬ ================= */
+function Host() {
+  const [session, setSession] = useState(undefined);
+  const [toy, setToy] = useState(null);
+  useEffect(() => {
+    sb.auth.getSession().then(({ data }) => setSession(data.session));
+    const { data } = sb.auth.onAuthStateChange((_e, s) => setSession(s));
+    return () => data.subscription.unsubscribe();
+  }, []);
+  if (session === undefined) return html`<p style="padding:40px">Загружаю…</p>`;
+  if (!session) return html`<${Login} />`;
+  return toy ? html`<${ToyView} toy=${toy} back=${() => setToy(null)} />` : html`<${ToyList} open=${setToy} />`;
+}
+
+const slug = new URLSearchParams(location.search).get("t");
+render(slug ? html`<${Invitation} slug=${slug} />` : html`<${Host} />`, document.getElementById("app"));
+</script>
+</body>
+</html>
